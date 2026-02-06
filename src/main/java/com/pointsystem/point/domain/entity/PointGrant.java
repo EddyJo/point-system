@@ -61,4 +61,28 @@ public class PointGrant {
             this.grantId = UUID.randomUUID().toString();
         }
     }
+
+    public boolean isActive() {
+        return this.status == GrantStatus.ACTIVE;
+    }
+
+    public boolean isCancelable() {
+        return this.status == GrantStatus.ACTIVE
+                && this.amountAvailable.equals(this.amountTotal);
+    }
+
+    public void cancel() {
+        if (!isCancelable()) {
+            throw new IllegalStateException("취소할 수 없는 적립입니다.");
+        }
+        this.status = GrantStatus.CANCELED;
+        this.amountAvailable = 0L;
+    }
+
+    public long debit(long amount) {
+        long availableToDebit = Math.min(amount, this.amountAvailable);
+        this.amountAvailable -= availableToDebit;
+        return availableToDebit;
+    }
+
 }

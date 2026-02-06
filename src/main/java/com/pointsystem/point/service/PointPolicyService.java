@@ -15,7 +15,7 @@ public class PointPolicyService {
     public static final String MAX_BALANCE_PER_USER_CONFIG = "MAX_BALANCE_PER_USER"; //유저당 보유가능한 최대 잔애
     public static final String EXPIRE_DAYS_CONFIG = "DEFAULT_EXPIRE_DAYS"; // 포인트 유효기간
     public static final long DEFAULT_MAX_GRANT_PER_TRANSACTION = 100_000;
-    public static final long DEFAULT_MAX_BALANCE_PER_USER = 5_000_000;
+    public static final long DEFAULT_MAX_BALANCE_PER_USER = 1_000_000;
     public static final long DEFAULT_EXPIRE_DAYS = 365;
     private final PointPolicyRepository pointPolicyRepository;
 
