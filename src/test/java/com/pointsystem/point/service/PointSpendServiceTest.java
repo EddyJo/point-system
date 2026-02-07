@@ -3,16 +3,20 @@ package com.pointsystem.point.service;
 import com.pointsystem.common.exception.BusinessException;
 import com.pointsystem.common.exception.ErrorCode;
 import com.pointsystem.point.controller.dto.PointGrantRequest;
+import com.pointsystem.point.controller.dto.PointSpendCancelResult;
 import com.pointsystem.point.controller.dto.PointSpendRequest;
 import com.pointsystem.point.domain.entity.*;
 import com.pointsystem.point.domain.repository.PointGrantRepository;
 import com.pointsystem.point.domain.repository.PointLedgerRepository;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +35,8 @@ class PointSpendServiceTest {
     private PointGrantRepository grantRepository;
     @Autowired
     private PointLedgerRepository ledgerRepository;
+    @Autowired
+    private EntityManager entityManager;
 
     private PointGrant createGrant(long amount) {
         return grantService.grantPoint(
@@ -132,6 +138,170 @@ class PointSpendServiceTest {
                     .isInstanceOf(BusinessException.class)
                     .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
                             .isEqualTo(ErrorCode.SPEND_DUPLICATE_ORDER));
+        }
+    }
+
+    @Nested
+    class cancelSpend_테스트 {
+
+        @Test
+        void 전액_취소시_상태가_CANCELED가_된다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            PointSpendCancelResult result = spendService.cancelSpend(spend.getSpendId(), 500L);
+
+            assertThat(result.spend().getStatus()).isEqualTo(SpendStatus.CANCELED);
+            assertThat(result.spend().getAmountCanceled()).isEqualTo(500L);
+            assertThat(result.canceledAmount()).isEqualTo(500L);
+        }
+
+        @Test
+        void 부분_취소시_상태가_PARTIALLY_CANCELED가_된다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            PointSpendCancelResult result = spendService.cancelSpend(spend.getSpendId(), 200L);
+
+            assertThat(result.spend().getStatus()).isEqualTo(SpendStatus.PARTIALLY_CANCELED);
+            assertThat(result.spend().getAmountCanceled()).isEqualTo(200L);
+            assertThat(result.spend().cancellableAmount()).isEqualTo(300L);
+        }
+
+        @Test
+        void 취소시_원래_Grant에_잔액이_복원된다() {
+            PointGrant grant = createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 600L));
+
+            spendService.cancelSpend(spend.getSpendId(), 400L);
+
+            PointGrant updated = grantRepository.findById(grant.getGrantId()).orElseThrow();
+            assertThat(updated.getAmountAvailable()).isEqualTo(800L);
+        }
+
+        @Test
+        void 취소시_Ledger에_SPEND_CANCEL이_기록된다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            spendService.cancelSpend(spend.getSpendId(), 300L);
+
+            List<PointLedger> ledgers = ledgerRepository.findByCustomerIdOrderByCreatedAtDesc(CUSTOMER_ID);
+            PointLedger cancelLedger = ledgers.get(0);
+            assertThat(cancelLedger.getEventType()).isEqualTo(LedgerEventType.SPEND_CANCEL);
+            assertThat(cancelLedger.getAmount()).isEqualTo(300L);
+        }
+
+        @Test
+        void 부분_취소_후_추가_부분_취소가_가능하다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            spendService.cancelSpend(spend.getSpendId(), 200L);
+            PointSpendCancelResult result = spendService.cancelSpend(spend.getSpendId(), 300L);
+
+            assertThat(result.spend().getStatus()).isEqualTo(SpendStatus.CANCELED);
+            assertThat(result.spend().getAmountCanceled()).isEqualTo(500L);
+        }
+
+        @Test
+        void 복수_Grant_사용_후_취소시_잔액이_올바르게_복원된다() {
+            PointGrant grantA = createGrant(1000L);
+            PointGrant grantB = createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 1500L));
+
+            spendService.cancelSpend(spend.getSpendId(), 1500L);
+
+            long totalBalance = grantRepository.calculateAvailableBalance(
+                    CUSTOMER_ID, GrantStatus.ACTIVE, spend.getCreatedAt());
+            assertThat(totalBalance).isEqualTo(2000L);
+        }
+
+        @Test
+        void 만료된_Grant의_사용_취소시_RESTORE_Grant가_발급된다() {
+
+            PointGrant grant = grantService.grantPoint(
+                    new PointGrantRequest(CUSTOMER_ID, 1000L, GrantType.SYSTEM, null));
+
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            //만료일을 과거로 강제 변경
+            entityManager.createNativeQuery(
+                            "UPDATE point_grant SET expires_at = :expiredAt WHERE grant_id = :grantId")
+                    .setParameter("expiredAt", Instant.now().minus(1, ChronoUnit.DAYS))
+                    .setParameter("grantId", grant.getGrantId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.clear();
+
+            PointSpendCancelResult result = spendService.cancelSpend(spend.getSpendId(), 500L);
+
+            assertThat(result.restoredAsNewGrants()).isEqualTo(500L);
+            assertThat(result.restoredToOriginalGrants()).isEqualTo(0L);
+            assertThat(result.newRestoreGrants()).hasSize(1);
+
+            PointGrant restoreGrant = result.newRestoreGrants().get(0);
+            assertThat(restoreGrant.getGrantType()).isEqualTo(GrantType.RESTORE);
+            assertThat(restoreGrant.getAmountTotal()).isEqualTo(500L);
+            assertThat(restoreGrant.getCustomerId()).isEqualTo(CUSTOMER_ID);
+
+            // Ledger에 RESTORE_GRANT 기록 확인
+            List<PointLedger> ledgers = ledgerRepository.findByCustomerIdOrderByCreatedAtDesc(CUSTOMER_ID);
+            boolean hasRestoreLedger = ledgers.stream()
+                    .anyMatch(i -> i.getEventType() == LedgerEventType.RESTORE_GRANT && i.getAmount() == 500L);
+            assertThat(hasRestoreLedger).isTrue();
+        }
+
+        @Test
+        void 존재하지_않는_spendId로_취소하면_예외가_발생한다() {
+            assertThatThrownBy(() -> spendService.cancelSpend("non-existent", 100L))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.SPEND_NOT_FOUND));
+        }
+
+        @Test
+        void 이미_전액_취소된_Spend를_다시_취소하면_예외가_발생한다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+            spendService.cancelSpend(spend.getSpendId(), 500L);
+
+            assertThatThrownBy(() -> spendService.cancelSpend(spend.getSpendId(), 100L))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.SPEND_ALREADY_CANCELED));
+        }
+
+        @Test
+        void 취소_가능_금액을_초과하면_예외가_발생한다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            assertThatThrownBy(() -> spendService.cancelSpend(spend.getSpendId(), 600L))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.SPEND_CANCEL_AMOUNT_INVALID));
+        }
+
+        @Test
+        void 취소_금액이_0이면_예외가_발생한다() {
+            createGrant(1000L);
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 500L));
+
+            assertThatThrownBy(() -> spendService.cancelSpend(spend.getSpendId(), 0L))
+                    .isInstanceOf(BusinessException.class)
+                    .satisfies(e -> assertThat(((BusinessException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.SPEND_CANCEL_AMOUNT_INVALID));
         }
     }
 

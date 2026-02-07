@@ -56,4 +56,14 @@ public class PointSpendAllocation {
     void setSpend(PointSpend spend) {
         this.spend = spend;
     }
+
+    public long remainingCancelable() {
+        return this.amountUsed - this.amountCanceled;
+    }
+
+    public long cancelAsPossible(long requestAmount) {
+        long toCancel = Math.min(remainingCancelable(), requestAmount);
+        this.amountCanceled += toCancel;
+        return toCancel;
+    }
 }

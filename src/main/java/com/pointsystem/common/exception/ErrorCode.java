@@ -21,7 +21,10 @@ public enum ErrorCode {
 
     //사용
     SPEND_INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "SPEND_001", "포인트 잔액이 부족합니다."),
-    SPEND_DUPLICATE_ORDER(HttpStatus.CONFLICT, "SPEND_002", "이미 처리된 주문입니다.");
+    SPEND_DUPLICATE_ORDER(HttpStatus.CONFLICT, "SPEND_002", "이미 처리된 주문입니다."),
+    SPEND_NOT_FOUND(HttpStatus.NOT_FOUND, "SPEND_003", "사용 내역을 찾을 수 없습니다."),
+    SPEND_CANCEL_AMOUNT_INVALID(HttpStatus.BAD_REQUEST, "SPEND_004", "취소 금액이 유효하지 않습니다."),
+    SPEND_ALREADY_CANCELED(HttpStatus.CONFLICT, "SPEND_005", "이미 전액 취소된 사용입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

@@ -85,4 +85,12 @@ public class PointGrant {
         return availableToDebit;
     }
 
+    public boolean isExpired(Instant now) {
+        return !this.expiresAt.isAfter(now);
+    }
+    
+    public void credit(long amount) {
+        this.amountAvailable += amount;
+    }
+
 }

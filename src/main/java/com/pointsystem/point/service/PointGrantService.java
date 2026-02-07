@@ -3,10 +3,7 @@ package com.pointsystem.point.service;
 import com.pointsystem.common.exception.BusinessException;
 import com.pointsystem.common.exception.ErrorCode;
 import com.pointsystem.point.controller.dto.PointGrantRequest;
-import com.pointsystem.point.domain.entity.GrantStatus;
-import com.pointsystem.point.domain.entity.LedgerEventType;
-import com.pointsystem.point.domain.entity.PointGrant;
-import com.pointsystem.point.domain.entity.PointLedger;
+import com.pointsystem.point.domain.entity.*;
 import com.pointsystem.point.domain.repository.PointGrantRepository;
 import com.pointsystem.point.domain.repository.PointLedgerRepository;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +72,27 @@ public class PointGrantService {
         recordLedger(grant.getCustomerId(), LedgerEventType.GRANT_CANCEL, grant.getGrantId(), -canceledAmount, now);
 
         log.info("포인트 적립 취소 완료: grantId={}, customerId={}, canceledAmount={}", grantId, grant.getCustomerId(), canceledAmount);
+        return grant;
+    }
+
+    @Transactional
+    public PointGrant restoreGrant(String customerId, long amount, Instant now) {
+        log.info("복원 포인트 부여: customerId={}, amount={}", customerId, amount);
+        long defaultExpireDays = policyService.getDefaultExpireDays();
+        Instant expiresAt = now.plus(defaultExpireDays, ChronoUnit.DAYS);
+
+        PointGrant grant = PointGrant.create(
+                customerId,
+                GrantType.RESTORE,
+                amount,
+                expiresAt,
+                now
+        );
+
+        grantRepository.save(grant);
+        recordLedger(customerId, LedgerEventType.RESTORE_GRANT, grant.getGrantId(), amount, now);
+
+        log.info("복원 포인트 부여 완료: grantId={}, customerId={}, amount={}", grant.getGrantId(), customerId, amount);
         return grant;
     }
 

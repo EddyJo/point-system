@@ -66,4 +66,20 @@ public class PointSpend {
         this.allocations.add(allocation);
         allocation.setSpend(this);
     }
+
+    public long cancellableAmount() {
+        return this.amountTotal - this.amountCanceled;
+    }
+
+    public void applyCancel(long cancelAmount) {
+        if (cancelAmount < 1 || cancelAmount > cancellableAmount()) {
+            throw new IllegalArgumentException("취소 금액이 유효하지 않습니다.");
+        }
+        this.amountCanceled += cancelAmount;
+        if (this.amountCanceled.equals(this.amountTotal)) {
+            this.status = SpendStatus.CANCELED;
+        } else {
+            this.status = SpendStatus.PARTIALLY_CANCELED;
+        }
+    }
 }

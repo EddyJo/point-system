@@ -1,9 +1,6 @@
 package com.pointsystem.point.controller;
 
-import com.pointsystem.point.controller.dto.PointGrantRequest;
-import com.pointsystem.point.controller.dto.PointGrantResponse;
-import com.pointsystem.point.controller.dto.PointSpendRequest;
-import com.pointsystem.point.controller.dto.PointSpendResponse;
+import com.pointsystem.point.controller.dto.*;
 import com.pointsystem.point.domain.entity.PointGrant;
 import com.pointsystem.point.domain.entity.PointSpend;
 import com.pointsystem.point.service.PointGrantService;
@@ -38,5 +35,13 @@ public class PointController {
     public ResponseEntity<PointSpendResponse> createSpend(@Valid @RequestBody PointSpendRequest request) {
         PointSpend spend = pointSpendService.spendPoint(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(PointSpendResponse.from(spend));
+    }
+
+    @PostMapping("/{spendId}/cancellations")
+    public ResponseEntity<PointSpendCancelResponse> cancelSpend(
+            @PathVariable String spendId,
+            @Valid @RequestBody PointSpendCancelRequest request) {
+        PointSpendCancelResult result = pointSpendService.cancelSpend(spendId, request.cancelAmount());
+        return ResponseEntity.status(HttpStatus.CREATED).body(PointSpendCancelResponse.from(result));
     }
 }
