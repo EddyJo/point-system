@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class PointController {
 
-    private PointGrantService pointGrantService;
-    private PointSpendService pointSpendService;
+    private final PointGrantService pointGrantService;
+    private final PointSpendService pointSpendService;
 
     @PostMapping("/grants")
     public ResponseEntity<PointGrantResponse> createGrant(@Valid @RequestBody PointGrantRequest request) {
@@ -25,7 +25,7 @@ public class PointController {
         return ResponseEntity.status(HttpStatus.CREATED).body(PointGrantResponse.from(grant));
     }
 
-    @PostMapping("/{grantId}/cancellations")
+    @PostMapping("/grants/{grantId}/cancellations")
     public ResponseEntity<PointGrantResponse> cancelGrant(@PathVariable String grantId) {
         PointGrant grant = pointGrantService.cancelPointGrant(grantId);
         return ResponseEntity.status(HttpStatus.CREATED).body(PointGrantResponse.from(grant));
@@ -37,7 +37,7 @@ public class PointController {
         return ResponseEntity.status(HttpStatus.CREATED).body(PointSpendResponse.from(spend));
     }
 
-    @PostMapping("/{spendId}/cancellations")
+    @PostMapping("/spends/{spendId}/cancellations")
     public ResponseEntity<PointSpendCancelResponse> cancelSpend(
             @PathVariable String spendId,
             @Valid @RequestBody PointSpendCancelRequest request) {
