@@ -52,4 +52,8 @@ public class PointSpendAllocation {
             this.allocationId = UUID.randomUUID().toString();
         }
     }
+
+    void setSpend(PointSpend spend) {
+        this.spend = spend;
+    }
 }

@@ -17,8 +17,11 @@ public enum ErrorCode {
     GRANT_BALANCE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "GRANT_003", "고객 보유 한도를 초과합니다."),
     GRANT_NOT_FOUND(HttpStatus.NOT_FOUND, "GRANT_004", "적립 내역을 찾을 수 없습니다."),
     GRANT_ALREADY_USED(HttpStatus.CONFLICT, "GRANT_005", "이미 사용된 적립은 취소할 수 없습니다."),
-    GRANT_ALREADY_CANCELED(HttpStatus.CONFLICT, "GRANT_006", "이미 취소된 적립입니다.");
+    GRANT_ALREADY_CANCELED(HttpStatus.CONFLICT, "GRANT_006", "이미 취소된 적립입니다."),
 
+    //사용
+    SPEND_INSUFFICIENT_BALANCE(HttpStatus.BAD_REQUEST, "SPEND_001", "포인트 잔액이 부족합니다."),
+    SPEND_DUPLICATE_ORDER(HttpStatus.CONFLICT, "SPEND_002", "이미 처리된 주문입니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

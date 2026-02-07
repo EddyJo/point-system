@@ -54,7 +54,7 @@ public class PointSpend {
     public static PointSpend create(String customerId, String orderId, long amountTotal, Instant now) {
         return new PointSpend(customerId, orderId, amountTotal, now);
     }
-    
+
     @PrePersist
     protected void onCreate() {
         if (this.spendId == null) {
@@ -62,4 +62,8 @@ public class PointSpend {
         }
     }
 
+    public void addAllocation(PointSpendAllocation allocation) {
+        this.allocations.add(allocation);
+        allocation.setSpend(this);
+    }
 }

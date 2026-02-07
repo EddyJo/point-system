@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface PointGrantRepository extends JpaRepository<PointGrant, String> {
@@ -19,9 +20,19 @@ public interface PointGrantRepository extends JpaRepository<PointGrant, String> 
             @Param("status") GrantStatus status,
             @Param("now") Instant now
     );
-    
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT g FROM PointGrant g WHERE g.grantId = :grantId")
     Optional<PointGrant> findByIdWithLock(@Param("grantId") String grantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT g FROM PointGrant g WHERE g.customerId = :customerId " +
+            "AND g.status = :status AND g.amountAvailable > 0 AND g.expiresAt > :now " +
+            "ORDER BY CASE WHEN g.grantType = 'MANUAL' THEN 0 ELSE 1 END, g.expiresAt ASC, g.createdAt ASC")
+    List<PointGrant> findUsableGrantsWithLock(
+            @Param("customerId") String customerId,
+            @Param("status") GrantStatus status,
+            @Param("now") Instant now
+    );
 
 }
