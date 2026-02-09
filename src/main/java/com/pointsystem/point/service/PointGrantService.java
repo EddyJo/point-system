@@ -136,4 +136,8 @@ public class PointGrantService {
         PointLedger ledger = PointLedger.create(customerId, eventType, refId, amount, null, now);
         ledgerRepository.save(ledger);
     }
+
+    public UsableGrants findUsableGrantsWithLock(String customerId, Instant now) {
+        return new UsableGrants(grantRepository.findUsableGrantsWithLock(customerId, GrantStatus.ACTIVE, now));
+    }
 }

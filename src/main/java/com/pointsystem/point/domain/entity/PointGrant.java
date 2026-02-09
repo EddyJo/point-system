@@ -58,6 +58,7 @@ public class PointGrant {
     @PrePersist
     protected void onCreate() {
         if (this.grantId == null) {
+            //TODO multi instance환경에서 uuid uniqueness 보장 어려울수도, 추후 고민
             this.grantId = UUID.randomUUID().toString();
         }
     }
@@ -88,7 +89,7 @@ public class PointGrant {
     public boolean isExpired(Instant now) {
         return !this.expiresAt.isAfter(now);
     }
-    
+
     public void credit(long amount) {
         this.amountAvailable += amount;
     }

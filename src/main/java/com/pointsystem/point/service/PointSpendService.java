@@ -38,19 +38,9 @@ public class PointSpendService {
             throw new BusinessException(ErrorCode.SPEND_DUPLICATE_ORDER);
         }
 
-        //TODO PointGrantService에서 해당 기능 제공하기.
-        //TODO usableGrants -> 일급컬랙션으로 리팩토링(sumAmountAvailable, deductSpendAmount)
-        List<PointGrant> usableGrants = grantRepository.findUsableGrantsWithLock(
-                request.customerId(), GrantStatus.ACTIVE, now);
+        UsableGrants usableGrants = grantService.findUsableGrantsWithLock(request.customerId(), now);
 
-        long totalAvailable = usableGrants.stream()
-                .mapToLong(PointGrant::getAmountAvailable)
-                .sum();
-
-        if (totalAvailable < request.amount()) {
-            throw new BusinessException(ErrorCode.SPEND_INSUFFICIENT_BALANCE,
-                    String.format("(필요: %d, 보유: %d)", request.amount(), totalAvailable));
-        }
+        usableGrants.validateSufficientBalance(request.amount());
 
         PointSpend spend = PointSpend.create(
                 request.customerId(),
@@ -59,17 +49,8 @@ public class PointSpendService {
                 now
         );
 
-        long remainingAmount = request.amount();
-        for (PointGrant grant : usableGrants) {
-            if (remainingAmount <= 0) break;
-
-            long deductAmount = grant.debit(remainingAmount);
-            if (deductAmount > 0) {
-                PointSpendAllocation allocation = PointSpendAllocation.create(grant, deductAmount, now);
-                spend.addAllocation(allocation);
-                remainingAmount -= deductAmount;
-            }
-        }
+        List<PointSpendAllocation> allocations = usableGrants.deduct(request.amount(), now);
+        allocations.forEach(spend::addAllocation);
 
         spendRepository.save(spend);
         recordLedger(spend.getCustomerId(), LedgerEventType.SPEND, spend.getSpendId(),
@@ -97,7 +78,7 @@ public class PointSpendService {
         }
         //TODO PointAllocationService 해당 기능 제공하기.
         //TODO allocations -> 일급컬랙션으로 리팩토링(취소 처리, deductSpendAmount)
-        List<PointSpendAllocation> allocations = allocationRepository.findBySpendIdWithGrant(spendId);
+        List<PointSpendAllocation> allocations = allocationRepository.findBySpendIdWithGrantForCancel(spendId, now);
 
         long remainingCancel = cancelAmount;
         long restoredToOriginal = 0;

@@ -260,6 +260,44 @@ class PointSpendServiceTest {
         }
 
         @Test
+        void 부분_취소시_유효한_적립부터_우선_복원된다() {
+            // Grant A: 만료 예정 → 사용 후 만료시킴
+            // Grant B: 유효함
+            PointGrant grantA = grantService.grantPoint(
+                    new PointGrantRequest(CUSTOMER_ID, 1000L, GrantType.SYSTEM, null));
+            PointGrant grantB = grantService.grantPoint(
+                    new PointGrantRequest(CUSTOMER_ID, 500L, GrantType.SYSTEM, null));
+
+            // 1200원 사용 → A에서 1000, B에서 200 차감
+            PointSpend spend = spendService.spendPoint(
+                    new PointSpendRequest(CUSTOMER_ID, "order-001", 1200L));
+
+            // Grant A를 만료시킴
+            entityManager.createNativeQuery(
+                            "UPDATE point_grant SET expires_at = :expiredAt WHERE grant_id = :grantId")
+                    .setParameter("expiredAt", Instant.now().minus(1, ChronoUnit.DAYS))
+                    .setParameter("grantId", grantA.getGrantId())
+                    .executeUpdate();
+            entityManager.flush();
+            entityManager.clear();
+
+            // 500원 부분 취소
+            PointSpendCancelResult result = spendService.cancelSpend(spend.getSpendId(), 500L);
+
+            // 유효한 Grant B부터 복원되어야 한다 (200원)
+            // 나머지 300원은 만료된 Grant A → RESTORE 신규 적립
+            assertThat(result.restoredToOriginalGrants()).isEqualTo(200L);
+            assertThat(result.restoredAsNewGrants()).isEqualTo(300L);
+            assertThat(result.newRestoreGrants()).hasSize(1);
+            assertThat(result.newRestoreGrants().get(0).getGrantType()).isEqualTo(GrantType.RESTORE);
+            assertThat(result.newRestoreGrants().get(0).getAmountTotal()).isEqualTo(300L);
+
+            // Grant B 잔액 확인: 원래 500 - 200 사용 + 200 복원 = 500
+            PointGrant updatedB = grantRepository.findById(grantB.getGrantId()).orElseThrow();
+            assertThat(updatedB.getAmountAvailable()).isEqualTo(500L);
+        }
+
+        @Test
         void 존재하지_않는_spendId로_취소하면_예외가_발생한다() {
             assertThatThrownBy(() -> spendService.cancelSpend("non-existent", 100L))
                     .isInstanceOf(BusinessException.class)
